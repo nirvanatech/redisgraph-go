@@ -122,7 +122,7 @@ func TestCreateQuery(t *testing.T) {
 
 	// Validate statistics.
 	assert.Equal(t, res.NodesCreated(), 1, "Expecting a single node to be created.")
-	assert.Equal(t, res.PropertiesSet(), 1, "Expecting a songle property to be added.")
+	assert.Equal(t, res.PropertiesSet(), 1, "Expecting a single property to be added.")
 
 	q = "MATCH (w:WorkPlace) RETURN w"
 	res, err = graph.Query(q)
@@ -135,6 +135,67 @@ func TestCreateQuery(t *testing.T) {
 	r := res.Record()
 	w := r.GetByIndex(0).(*Node)
 	assert.Equal(t, w.Labels[0], "WorkPlace", "Unexpected node label.")
+}
+
+func TestMultipleEdges(t *testing.T) {
+	q := `
+		MERGE (v1:vehicle {id: 'vin1'})
+		MERGE (v2:vehicle {id: 'vin2'})
+		MERGE (v3:vehicle {id: 'vin3'})
+		MERGE (tag1:tag {id: 'tag1'}) 
+		MERGE (tag2:tag {id: 'tag2'})
+		MERGE (v1)-[:belongs_to]->(tag1) 
+		MERGE (v2)-[:belongs_to]->(tag1) 
+		MERGE (v3)-[:belongs_to]->(tag1)
+		MERGE (v1)-[:belongs_to]->(tag2)
+		MERGE (v3)-[:belongs_to]->(tag2)
+    `
+	res, err := graph.Query(q)
+	if err != nil {
+		t.Error(err)
+	}
+
+	assert.True(t, res.Empty(), "Expecting empty result-set")
+
+	// Validate statistics.
+	assert.Equal(t, res.NodesCreated(), 5, "Expecting 5 nodes to be created.")
+	assert.Equal(t, res.RelationshipsCreated(), 5, "Expecting 5 edges to be created.")
+	assert.Equal(t, res.PropertiesSet(), 5, "Expecting 5 properties to be set.")
+
+	q = `
+		MATCH (tag1:tag {id: 'tag1'})
+		MATCH (tag1)<-[edge:belongs_to]-(vehicle:vehicle)
+		RETURN tag1, edge, vehicle
+		`
+	res, err = graph.Query(q)
+	if err != nil {
+		t.Error(err)
+	}
+
+	for res.Next() {
+		r := res.Record()
+		nodesByID := make(map[uint64]*Node)
+		var edge *Edge
+		for _, k := range r.Keys() {
+			val, ok := r.Get(k)
+			assert.True(t, ok)
+			switch v := val.(type) {
+			case *Node:
+				nodesByID[v.ID] = v
+			case *Edge:
+				edge = v
+			}
+			assert.NotEmpty(t, val)
+		}
+		assert.NotNil(t, edge)
+		assert.Nil(t, edge.Source)
+		assert.Nil(t, edge.Destination)
+		edge.Source = nodesByID[edge.SourceNodeID()]
+		edge.Destination = nodesByID[edge.SourceNodeID()]
+		assert.NotNil(t, nodesByID[edge.SourceNodeID()])
+		assert.NotNil(t, nodesByID[edge.DestNodeID()])
+		assert.NotEqual(t, edge.SourceNodeID(), edge.DestNodeID())
+	}
 }
 
 func TestCreateROQueryFailure(t *testing.T) {

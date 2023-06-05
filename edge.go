@@ -55,7 +55,7 @@ func (e Edge) SourceNodeID() uint64 {
 
 // DestNodeID returns edge destination node ID
 func (e Edge) DestNodeID() uint64 {
-	if e.Source != nil {
+	if e.Destination != nil {
 		return e.Destination.ID
 	} else {
 		return e.destNodeID
